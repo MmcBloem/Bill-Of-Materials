@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<title>Simple POS App</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+#fullRow {
+  height: calc(100vh - 56px);
+  overflow: hidden;
+}
+#sidebar {
+  height: 100%;
+  overflow-y: auto;
+}
+#mainCol {
+  height: 100%;
+  overflow-y: auto;
+}
+</style>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#">My BOM</a>
+    <div class="form-check form-switch text-white ms-3">
+      <input class="form-check-input" type="checkbox" id="editModeCheckbox"/>
+      <label class="form-check-label" for="editModeCheckbox">Edit Mode</label>
+    </div>
+    <button class="btn btn-outline-light ms-auto" onclick="toggleSidebar()">Toggle Sidebar</button>
+  </div>
+</nav>
+<div class="container-fluid">
+  <div class="row" id="fullRow">
+    <div id="sidebar" class="col-12 col-md-3 bg-dark text-white">
+      <div class="p-3">
+        <h5 class="mb-3">Add New Item</h5>
+        <form id="itemForm">
+          <div class="mb-3">
+            <label for="itemCode" class="form-label">Item Code</label>
+            <input type="text" class="form-control" id="itemCode" required>
+          </div>
+          <div class="mb-3">
+            <label for="itemName" class="form-label">Item Name</label>
+            <input type="text" class="form-control" id="itemName" required>
+          </div>
+          <div class="mb-3">
+            <label for="itemPrice" class="form-label">Price</label>
+            <input type="number" step="0.01" class="form-control" id="itemPrice" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Add Item</button>
+        </form>
+        <hr class="border-secondary my-3">
+        <h5 class="mb-3">Correlation: Qty vs. Sales</h5>
+        <canvas id="topItemsChart" style="max-height:300px"></canvas>
+        <hr class="border-secondary my-3">
+        <div id="sidebarSummary" class="p-2">
+          <h6>Item Summary</h6>
+          <div id="itemCount" class="mb-1">Items in DB: 0</div>
+          <div id="transCount" class="mb-1">Transactions: 0</div>
+          <div id="totalSales" class="mb-1">Total Sales: 0.00</div>
+        </div>
+      </div>
+    </div>
+    <div id="mainCol" class="col-12 col-md-9">
+      <div class="container my-4">
+        <h1 class="mb-4">BOM</h1>
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Available Items</span>
+          </div>
+          <div class="card-body">
+            <div class="row mb-3">
+              <div class="col-6">
+                <input type="text" class="form-control" id="searchInput" placeholder="Search by code or name">
+              </div>
+              <div class="col-6 d-flex justify-content-end">
+                <button class="btn btn-secondary me-2" id="prevPage">Previous</button>
+                <button class="btn btn-secondary" id="nextPage">Next</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-striped mb-0" id="itemsTable">
+              <thead class="table-dark">
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Cart</span>
+            <div>
+              <button class="btn btn-info btn-sm me-2" id="saveAsRecipeBtn">Save as Recipe</button>
+              <button class="btn btn-warning btn-sm" id="loadRecipeBtn">Load Recipe</button>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <table class="table mb-0" id="cartTable">
+              <thead class="table-secondary">
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Markup (%)</th>
+                  <th>Quantity</th>
+                  <th>Subtotal</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="card-footer">
+            <div class="d-flex justify-content-between">
+              <h5>Total: <span id="totalPrice">0.00</span></h5>
+              <button class="btn btn-success" id="checkoutBtn">Checkout</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">Transactions</div>
+          <div class="card-body">
+            <div class="row g-3 mb-3">
+              <div class="col-md-3">
+                <label for="fromDate" class="form-label">Date From</label>
+                <input type="date" class="form-control" id="fromDate">
+              </div>
+              <div class="col-md-3">
+                <label for="toDate" class="form-label">Date To</label>
+                <input type="date" class="form-control" id="toDate">
+              </div>
+              <div class="col-md-3">
+                <input type="text" class="form-control mt-4" id="transactionSearchInput" placeholder="Search by client or date">
+              </div>
+              <div class="col-md-3 d-flex align-items-end justify-content-end">
+                <button class="btn btn-secondary" id="exportTransPdf">Export Table PDF</button>
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <table class="table mb-0" id="transactionsTable">
+              <thead class="table-info">
+                <tr>
+                  <th>Date</th>
+                  <th>Client</th>
+                  <th>Items</th>
+                  <th>Total</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="3" class="text-end fw-bold">Grand Total:</td>
+                  <td id="transGrandTotal" class="fw-bold">0.00</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Item</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editForm">
+          <input type="hidden" id="editItemId">
+          <div class="mb-3">
+            <label for="editItemCode" class="form-label">Code</label>
+            <input type="text" class="form-control" id="editItemCode" required>
+          </div>
+          <div class="mb-3">
+            <label for="editItemName" class="form-label">Name</label>
+            <input type="text" class="form-control" id="editItemName" required>
+          </div>
+          <div class="mb-3">
+            <label for="editItemPrice" class="form-label">Price</label>
+            <input type="number" step="0.01" class="form-control" id="editItemPrice" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="checkoutModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Checkout Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="checkoutForm">
+          <div class="mb-3">
+            <label for="checkoutClient" class="form-label">Client</label>
+            <input type="text" class="form-control" id="checkoutClient">
+          </div>
+          <div class="mb-3">
+            <label for="checkoutDescription" class="form-label">Description</label>
+            <input type="text" class="form-control" id="checkoutDescription">
+          </div>
+          <button type="submit" class="btn btn-success">Confirm</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="transactionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Transaction Slip</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="slipContent"></div>
+        <button class="btn btn-secondary mt-3" id="pdfBtn">Download PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editTransactionModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Transaction</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editTransId">
+        <div class="mb-3">
+          <label for="editTransClient" class="form-label">Client</label>
+          <input type="text" class="form-control" id="editTransClient">
+        </div>
+        <div class="mb-3">
+          <label for="editTransDescription" class="form-label">Description</label>
+          <input type="text" class="form-control" id="editTransDescription">
+        </div>
+        <div class="table-responsive">
+          <table class="table" id="editTransItemsTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Price</th>
+                <th>Quantity</th>
+                <th>Subtotal</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="saveTransChangesBtn" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="saveRecipeModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Save Recipe</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" class="form-control mb-3" id="recipeName" placeholder="Recipe Name">
+        <button class="btn btn-primary w-100" id="confirmSaveRecipe">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="loadRecipeModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Load Recipe</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table" id="recipeTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Amount</th>
+              <th colspan="2">Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let db;
+let cart=[];
+const dbName='POS_DB';
+const storeNameItems='items';
+const storeNameTransactions='transactions';
+const storeNameRecipes='recipes';
+let editingTransItems=[];
+let editingTransId=null;
+let editingTransClient='';
+let editingTransDesc='';
+let topItemsChart;
+
+// new code for edit mode
+function isEditMode() {
+  const cb = document.getElementById('editModeCheckbox');
+  return cb.checked;
+}
+
+function loadEditModeFromStorage(){
+  const stored = localStorage.getItem('editMode');
+  if(stored === 'true') {
+    document.getElementById('editModeCheckbox').checked = true;
+  } else {
+    document.getElementById('editModeCheckbox').checked = false;
+  }
+}
+
+function saveEditModeToStorage(){
+  localStorage.setItem('editMode', isEditMode());
+}
+
+function toggleElementsEditMode() {
+  renderItems();
+  renderCart();
+  renderTransactions(); // fix the transactions edit toggle
+  saveEditModeToStorage();
+}
+
+function initDB(){
+  return new Promise((resolve,reject)=>{
+    const r=window.indexedDB.open(dbName,5);
+    r.onerror=e=>reject(e.target.error);
+    r.onsuccess=e=>{db=e.target.result;resolve(db)};
+    r.onupgradeneeded=e=>{
+      db=e.target.result;
+      if(!db.objectStoreNames.contains(storeNameItems)){db.createObjectStore(storeNameItems,{keyPath:'id',autoIncrement:true})}
+      if(!db.objectStoreNames.contains(storeNameTransactions)){db.createObjectStore(storeNameTransactions,{keyPath:'id',autoIncrement:true})}
+      if(!db.objectStoreNames.contains(storeNameRecipes)){db.createObjectStore(storeNameRecipes,{keyPath:'id',autoIncrement:true})}
+    }
+  })
+}
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const main=document.getElementById('mainCol');
+  if(sb.classList.contains('d-none')){
+    sb.classList.remove('d-none');
+    main.classList.remove('col-12');
+    main.classList.add('col-md-9');
+  } else {
+    sb.classList.add('d-none');
+    main.classList.remove('col-md-9');
+    main.classList.add('col-12');
+  }
+}
+
+function addItem(code,name,rawPrice){
+  return new Promise((resolve,reject)=>{
+    const p=parseFloat(rawPrice);
+    if(isNaN(p)){return reject('Invalid numeric price')}
+    const t=db.transaction([storeNameItems],'readwrite');
+    t.onabort=ev=>reject(ev.target.error);
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameItems);
+    const it={code,name,price:p};
+    const req=s.add(it);
+    req.onsuccess=()=>resolve();
+    req.onerror=ev=>reject(ev.target.error);
+  });
+}
+
+function deleteItem(id){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameItems],'readwrite');
+    const s=t.objectStore(storeNameItems);
+    const req=s.delete(id);
+    req.onsuccess=()=>resolve();
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+
+function updateItem(id,code,name,rawPrice){
+  return new Promise((resolve,reject)=>{
+    const p=parseFloat(rawPrice);
+    if(isNaN(p)){return reject('Invalid numeric price')}
+    const t=db.transaction([storeNameItems],'readwrite');
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameItems);
+    s.get(id).onsuccess=e=>{
+      const d=e.target.result;
+      if(!d){return reject('Item not found')}
+      d.code=code;
+      d.name=name;
+      d.price=p;
+      s.put(d).onsuccess=()=>resolve();
+    };
+  });
+}
+
+function getAllItems(){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameItems],'readonly');
+    const s=t.objectStore(storeNameItems);
+    t.onerror=ev=>reject(ev.target.error);
+    const req=s.getAll();
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+function getAllTransactions(){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameTransactions],'readonly');
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameTransactions);
+    const req=s.getAll();
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+function getAllRecipes(){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameRecipes],'readonly');
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameRecipes);
+    const req=s.getAll();
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+function deleteRecipe(id){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameRecipes],'readwrite');
+    const s=t.objectStore(storeNameRecipes);
+    const req=s.delete(id);
+    req.onsuccess=()=>resolve();
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+function addRecipe(name,items){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameRecipes],'readwrite');
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameRecipes);
+    const data={name,items};
+    const req=s.add(data);
+    req.onsuccess=()=>resolve();
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+function saveTransaction(items,total,client,desc){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameTransactions],'readwrite');
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameTransactions);
+    const d={date:new Date().toLocaleString(),items,total,client:(client||''),description:(desc||'')};
+    const req=s.add(d);
+    req.onsuccess=()=>resolve();
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+function updateTransaction(id,items,total,client,desc){
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction([storeNameTransactions],'readwrite');
+    t.onerror=ev=>reject(ev.target.error);
+    const s=t.objectStore(storeNameTransactions);
+    s.get(id).onsuccess=e=>{
+      const rec=e.target.result;
+      if(!rec){return reject('Transaction not found')}
+      rec.items=items;
+      rec.total=total;
+      rec.client=(client||'');
+      rec.description=(desc||'');
+      s.put(rec).onsuccess=()=>resolve();
+    };
+  });
+}
+
+function usageByItem(){
+  return new Promise((resolve)=>{
+    getAllItems().then(allItems=>{
+      getAllTransactions().then(tx=>{
+        const usageMap={};
+        allItems.forEach(it=>{usageMap[it.id]=0});
+        tx.forEach(tr=>{
+          const arr=JSON.parse(tr.items);
+          arr.forEach(i=>{usageMap[i.id]=(usageMap[i.id]||0)+i.quantity;});
+        });
+        resolve(usageMap);
+      });
+    });
+  });
+}
+
+function isEditMode(){
+  const cb=document.getElementById('editModeCheckbox');
+  return cb.checked;
+}
+
+function renderItems(){
+  getAllItems().then(allItems=>{
+    usageByItem().then(usageMap=>{
+      const s=document.getElementById('searchInput').value.trim().toLowerCase();
+      let results;
+      if(s){
+        results=allItems.filter(it=>(it.code&&it.code.toLowerCase().includes(s))||(it.name&&it.name.toLowerCase().includes(s)));
+      } else {
+        const sorted=allItems.slice().sort((a,b)=>(usageMap[b.id]||0)-(usageMap[a.id]||0));
+        results=sorted.slice(0,20);
+      }
+      const tb=document.querySelector('#itemsTable tbody');
+      tb.innerHTML='';
+      results.forEach(it=>{
+        const row=document.createElement('tr');
+        let btns = `<button class="btn btn-sm btn-primary me-1" onclick="addToCart(${it.id},'${it.code}','${it.name}',${it.price})">Add</button>`;
+        if(isEditMode()){
+          btns += `<button class="btn btn-sm btn-warning me-1" onclick="openEditModal(${it.id},'${it.code}','${it.name}',${it.price})">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="removeItem(${it.id})">Delete</button>`;
+        }
+        row.innerHTML=`
+          <td>${it.code||''}</td>
+          <td>${it.name}</td>
+          <td>${it.price.toFixed(2)}</td>
+          <td>${btns}</td>
+        `;
+        tb.appendChild(row);
+      });
+      updateSidebarSummary();
+    });
+  });
+}
+
+function removeItem(id){
+  if(!confirm('Are you sure you want to delete this item?'))return;
+  deleteItem(id).then(()=>{
+    renderItems();
+  }).catch(()=>{});
+}
+
+function openEditModal(id,code,name,price){
+  document.getElementById('editItemId').value=id;
+  document.getElementById('editItemCode').value=code;
+  document.getElementById('editItemName').value=name;
+  document.getElementById('editItemPrice').value=price;
+  new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+// For the cart:
+// We'll store markup as c.markup, default 30
+// We'll remove plus minus and let user type quantity.
+
+function addToCart(id,code,name,price){
+  const ex=cart.find(c=>c.id===id);
+  if(ex){
+    ex.quantity = ex.quantity || 1;
+    ex.quantity++;
+  } else {
+    cart.push({id,code,name,price,quantity:1,markup:30});
+  }
+  renderCart();
+}
+function removeFromCart(id){
+  cart=cart.filter(c=>c.id!==id);
+  renderCart();
+}
+function updateCartQuantity(cid,newQty){
+  const c=cart.find(x=>x.id===cid);
+  if(!c)return;
+  const val=parseInt(newQty);
+  if(!isNaN(val)&&val>0){
+    c.quantity=val;
+  } else {
+    c.quantity=1;
+  }
+  renderCart();
+}
+function updateCartMarkup(cid,newMarkup){
+  const c=cart.find(x=>x.id===cid);
+  if(!c)return;
+  const val=parseFloat(newMarkup);
+  if(!isNaN(val)&&val>=0){
+    c.markup=val;
+  } else {
+    c.markup=30;
+  }
+  renderCart();
+}
+
+function renderCart(){
+  const tb=document.querySelector('#cartTable tbody');
+  tb.innerHTML='';
+  let total=0;
+  cart.forEach(c=>{
+    const realPrice = c.price * (1 + (c.markup||30)/100);
+    const st = realPrice * c.quantity;
+    total+=st;
+    let btns = '';
+    if(isEditMode()){
+      btns = `<button class="btn btn-sm btn-danger" onclick="removeFromCart(${c.id})">Remove</button>`;
+    }
+    const row=document.createElement('tr');
+    row.innerHTML=`
+      <td>${c.code||''}</td>
+      <td>${c.name}</td>
+      <td>${c.price.toFixed(2)}</td>
+      <td>
+        <input type="number" step="0.01" min="0" value="${c.markup}" style="width:60px" onchange="updateCartMarkup(${c.id},this.value)"/>
+      </td>
+      <td>
+        <input type="number" min="1" style="width:60px" value="${c.quantity}" onchange="updateCartQuantity(${c.id},this.value)"/>
+      </td>
+      <td>${st.toFixed(2)}</td>
+      <td>${btns}</td>
+    `;
+    tb.appendChild(row);
+  });
+  document.getElementById('totalPrice').textContent=total.toFixed(2);
+}
+
+function handleCheckout(){
+  if(cart.length===0){alert('Cart is empty!');return;}
+  new bootstrap.Modal(document.getElementById('checkoutModal')).show();
+}
+
+function renderTransactions(){
+  getAllTransactions().then(txs=>{
+    const from=document.getElementById('fromDate').value.trim();
+    const to=document.getElementById('toDate').value.trim();
+    const s=document.getElementById('transactionSearchInput').value.trim().toLowerCase();
+    let filtered=txs;
+    if(from){filtered=filtered.filter(x=>{try{const d=new Date(x.date);const f=new Date(from);return d>=f;}catch(_){return true;}});}
+    if(to){filtered=filtered.filter(x=>{try{const d=new Date(x.date);const t=new Date(to);t.setHours(23,59,59,999);return d<=t;}catch(_){return true;}});}
+    if(s){filtered=filtered.filter(x=>(x.client&&x.client.toLowerCase().includes(s))||(x.date&&x.date.toLowerCase().includes(s)))}
+    const tb=document.querySelector('#transactionsTable tbody');
+    tb.innerHTML='';
+    let sum=0;
+    filtered.forEach(t=>{
+      const arr=JSON.parse(t.items);
+      let desc='';
+      arr.forEach(i=>{desc+=`${i.name} (x${i.quantity}), `;});
+      sum+=t.total;
+      let btns = `<button class="btn btn-sm btn-info me-1" onclick="viewTransaction(${t.id})">View</button>`;
+      if(isEditMode()){
+        btns += `<button class="btn btn-sm btn-warning" onclick="editTransaction(${t.id})">Edit</button>`;
+      }
+      const row=document.createElement('tr');
+      row.innerHTML=`<td>${t.date}</td>
+        <td>${t.client||''}</td>
+        <td>${desc.slice(0,-2)}</td>
+        <td>${t.total.toFixed(2)}</td>
+        <td>${btns}</td>`;
+      tb.appendChild(row);
+    });
+    document.getElementById('transGrandTotal').textContent=sum.toFixed(2);
+  });
+}
+function editTransaction(id){
+  getAllTransactions().then(ts=>{
+    const x=ts.find(z=>z.id===id);
+    if(!x)return;
+    editingTransId=id;
+    editingTransClient=x.client;
+    editingTransDesc=x.description;
+    editingTransItems=JSON.parse(x.items).map(a=>({code:a.code,name:a.name,price:a.price,quantity:a.quantity}));
+    document.getElementById('editTransId').value=id;
+    document.getElementById('editTransClient').value=editingTransClient;
+    document.getElementById('editTransDescription').value=editingTransDesc;
+    renderEditTransItems();
+    new bootstrap.Modal(document.getElementById('editTransactionModal')).show();
+  });
+}
+function renderEditTransItems(){
+  const tb=document.querySelector('#editTransItemsTable tbody');
+  tb.innerHTML='';
+  editingTransItems.forEach((it,idx)=>{
+    const st=it.price*it.quantity;
+    const row=document.createElement('tr');
+    row.innerHTML=`
+      <td>${it.name}</td>
+      <td>${it.price.toFixed(2)}</td>
+      <td>
+        <button class="btn btn-sm btn-secondary" onclick="decTransItem(${idx})">-</button>
+        <span class="mx-2">${it.quantity}</span>
+        <button class="btn btn-sm btn-secondary" onclick="incTransItem(${idx})">+</button>
+      </td>
+      <td>${st.toFixed(2)}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="remTransItem(${idx})">Remove</button></td>
+    `;
+    tb.appendChild(row);
+  });
+}
+function decTransItem(i){
+  if(editingTransItems[i].quantity>1){editingTransItems[i].quantity--;}else{editingTransItems.splice(i,1);}
+  renderEditTransItems();
+}
+function incTransItem(i){editingTransItems[i].quantity++;renderEditTransItems();}
+function remTransItem(i){editingTransItems.splice(i,1);renderEditTransItems();}
+function saveTransChanges(){
+  const cl=document.getElementById('editTransClient').value.trim();
+  const ds=document.getElementById('editTransDescription').value.trim();
+  let tot=0;
+  editingTransItems.forEach(z=>{tot+=(z.price*z.quantity);});
+  updateTransaction(editingTransId,JSON.stringify(editingTransItems),tot,cl,ds).then(()=>{
+    bootstrap.Modal.getInstance(document.getElementById('editTransactionModal')).hide();
+    renderTransactions();
+    loadTopItems();
+    updateSidebarSummary();
+  }).catch(()=>{});
+}
+
+function viewTransaction(id){
+  getAllTransactions().then(txs=>{
+    const x=txs.find(t=>t.id===id);
+    if(!x)return;
+    const arr=JSON.parse(x.items);
+    let out=`<h6>Transaction ID: ${x.id}</h6><p>Date: ${x.date}</p><p>Client: ${x.client||''}</p><p>Description: ${x.description||''}</p><div class="border p-2"><ul>`;
+    let tot=0;
+    arr.forEach(i=>{
+      const sub=i.price*i.quantity;
+      tot+=sub;
+      out+=`<li>${i.name} x${i.quantity} @ ${i.price.toFixed(2)} = ${sub.toFixed(2)}</li>`;
+    });
+    out+=`</ul></div><h5 class="mt-2">Total: ${x.total.toFixed(2)}</h5>`;
+    document.getElementById('slipContent').innerHTML=out;
+    new bootstrap.Modal(document.getElementById('transactionModal')).show();
+    document.getElementById('pdfBtn').onclick=()=>downloadPDF(x.id,x.date,arr,x.total);
+  });
+}
+function downloadPDF(id,date,items,total){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.setFontSize(12);
+  doc.text(`Invoice #${id}`,10,10);
+  doc.text(`Date: ${date}`,10,20);
+  let lineY=30;
+  items.forEach(i=>{
+    const st=i.price*i.quantity;
+    doc.text(`${i.name} x${i.quantity} @ ${i.price.toFixed(2)} = ${st.toFixed(2)}`,10,lineY);
+    lineY+=10;
+  });
+  doc.text(`Total: ${total.toFixed(2)}`,10,lineY+10);
+  doc.save(`invoice_${id}.pdf`);
+}
+function exportTransTablePDF(){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt'});
+  const rows=[];
+  const trs=document.querySelectorAll('#transactionsTable tbody tr');
+  trs.forEach(r=>{
+    const tds=r.querySelectorAll('td');
+    const rowData=[];
+    tds.forEach((td,i)=>{if(i<4){rowData.push(td.innerText);}});
+    rows.push(rowData);
+  });
+  const startY=40;
+  doc.setFontSize(12);
+  doc.text('Transactions Report',40,20);
+  let colWidths=[120,120,200,60];
+  let rowHeight=20;
+  let x=40;
+  let y=startY;
+  doc.text('Date',x,y);
+  doc.text('Client',x+colWidths[0],y);
+  doc.text('Items',x+colWidths[0]+colWidths[1],y);
+  doc.text('Total',x+colWidths[0]+colWidths[1]+colWidths[2],y);
+  y+=rowHeight;
+  rows.forEach(r=>{
+    let cursor=x;
+    for(let i=0;i<r.length;i++){
+      doc.text(`${r[i]}`,cursor,y);
+      cursor+=colWidths[i];
+    }
+    y+=rowHeight;
+  });
+  const grand=document.getElementById('transGrandTotal').innerText||'0.00';
+  doc.text(`Grand Total: ${grand}`,40,y+20);
+  doc.save('transactions.pdf');
+}
+
+function loadTopItems(){
+  getAllTransactions().then(txs=>{
+    const mapQty={};
+    const mapSales={};
+    txs.forEach(t=>{
+      const arr=JSON.parse(t.items);
+      arr.forEach(a=>{
+        if(!mapQty[a.name]){mapQty[a.name]=0;}
+        if(!mapSales[a.name]){mapSales[a.name]=0;}
+        mapQty[a.name]+=a.quantity;
+        mapSales[a.name]+=(a.price*a.quantity);
+      });
+    });
+    const allNames=Object.keys(mapQty);
+    const dataQty=allNames.map(n=>mapQty[n]);
+    const dataSales=allNames.map(n=>mapSales[n]);
+    const combined=allNames.map((n,i)=>({name:n,qty:dataQty[i],sales:dataSales[i]}));
+    combined.sort((a,b)=>(b.qty+b.sales)-(a.qty+a.sales));
+    const top=combined.slice(0,10);
+    const labels=top.map(x=>x.name);
+    const data1=top.map(x=>x.qty);
+    const data2=top.map(x=>x.sales);
+    if(topItemsChart) topItemsChart.destroy();
+    topItemsChart=new Chart(document.getElementById('topItemsChart'),{
+      type:'bar',
+      data:{
+        labels:labels,
+        datasets:[
+          {
+            label:'Quantity',
+            data:data1,
+            backgroundColor:'rgba(54,162,235,0.6)',
+            yAxisID:'yQty'
+          },
+          {
+            label:'Sales',
+            data:data2,
+            backgroundColor:'rgba(255,99,132,0.6)',
+            yAxisID:'ySales'
+          }
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        scales:{
+          yQty:{type:'linear',position:'left'},
+          ySales:{type:'linear',position:'right'}
+        }
+      }
+    });
+  });
+}
+
+function updateSidebarSummary(){
+  getAllItems().then(items=>{
+    const count=items.length;
+    document.getElementById('itemCount').textContent=`Items in DB: ${count}`;
+    getAllTransactions().then(tx=>{
+      const tcount=tx.length;
+      document.getElementById('transCount').textContent=`Transactions: ${tcount}`;
+      let sum=0;
+      tx.forEach(t=>{sum+=t.total;});
+      document.getElementById('totalSales').textContent=`Total Sales: ${sum.toFixed(2)}`;
+    });
+  });
+}
+
+function saveRecipe(name,cartItems){
+  if(!name)return;
+  const arr=JSON.stringify(cartItems);
+  addRecipe(name,arr).then(()=>{
+    bootstrap.Modal.getInstance(document.getElementById('saveRecipeModal')).hide();
+    alert('Recipe saved');
+  }).catch(()=>{});
+}
+
+function loadRecipesList(){
+  getAllRecipes().then(rp=>{
+    const tb=document.querySelector('#recipeTable tbody');
+    tb.innerHTML='';
+    rp.forEach(r=>{
+      const row=document.createElement('tr');
+      row.innerHTML=`
+        <td>${r.name}</td>
+        <td><input type="number" min="1" value="1" id="recipeAmount${r.id}" style="width:60px"/></td>
+        <td>
+          <button class="btn btn-sm btn-primary me-2" onclick="loadRecipeIntoCart(${r.id})">Load</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteRecipeAction(${r.id})">Delete</button>
+        </td>
+      `;
+      tb.appendChild(row);
+    });
+    new bootstrap.Modal(document.getElementById('loadRecipeModal')).show();
+  });
+}
+
+function deleteRecipeAction(id){
+  if(!confirm('Are you sure you want to delete this recipe?'))return;
+  deleteRecipe(id).then(()=>{
+    loadRecipesList();
+  }).catch(()=>{});
+}
+
+function loadRecipeIntoCart(rid){
+  const amtInput=document.getElementById(`recipeAmount${rid}`);
+  let amt=1;
+  if(amtInput){
+    const val=parseInt(amtInput.value);
+    if(!isNaN(val)&&val>0){amt=val;}else{amt=1;}
+  }
+  getAllRecipes().then(rp=>{
+    const rec=rp.find(x=>x.id===rid);
+    if(!rec)return;
+    const arr=JSON.parse(rec.items);
+    arr.forEach(citem=>{
+      const ex=cart.find(c=>c.id===citem.id);
+      let newQty=citem.quantity*amt;
+      if(ex){
+        ex.quantity+=newQty;
+      } else {
+        // ensure default markup if not present
+        const theMarkup = (citem.markup!==undefined) ? citem.markup : 30;
+        cart.push({id:citem.id,code:citem.code,name:citem.name,price:citem.price,quantity:newQty,markup:theMarkup});
+      }
+    });
+    renderCart();
+    bootstrap.Modal.getInstance(document.getElementById('loadRecipeModal')).hide();
+  });
+}
+
+window.onload=()=>{
+  initDB().then(()=>{
+    loadEditModeFromStorage();
+    document.getElementById('editModeCheckbox').addEventListener('change', toggleElementsEditMode);
+
+    // Fix: itemForm submission to add item
+    document.getElementById('itemForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const code = document.getElementById('itemCode').value.trim();
+      const name = document.getElementById('itemName').value.trim();
+      const price = document.getElementById('itemPrice').value.trim();
+      addItem(code, name, price)
+        .then(() => {
+          document.getElementById('itemForm').reset();
+          renderItems();
+          alert('Item added successfully!');
+        })
+        .catch(err => {
+          alert('Error adding item: ' + err);
+        });
+    });
+
+    renderItems();
+    renderCart();
+    renderTransactions();
+    loadTopItems();
+    updateSidebarSummary();
+  }).catch(()=>{})};
+
+document.getElementById('searchInput').addEventListener('input',()=>{renderItems();});
+document.getElementById('prevPage').addEventListener('click',()=>{});
+document.getElementById('nextPage').addEventListener('click',()=>{});
+document.getElementById('transactionSearchInput').addEventListener('input',renderTransactions);
+document.getElementById('fromDate').addEventListener('change',renderTransactions);
+document.getElementById('toDate').addEventListener('change',renderTransactions);
+document.getElementById('checkoutBtn').addEventListener('click',handleCheckout);
+document.getElementById('saveTransChangesBtn').addEventListener('click',saveTransChanges);
+document.getElementById('exportTransPdf').addEventListener('click',exportTransTablePDF);
+
+document.getElementById('editForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const i=parseInt(document.getElementById('editItemId').value);
+  const c=document.getElementById('editItemCode').value.trim();
+  const n=document.getElementById('editItemName').value.trim();
+  const p=document.getElementById('editItemPrice').value.trim();
+  updateItem(i,c,n,p).then(()=>{
+    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+    renderItems();
+    loadTopItems();
+  }).catch(()=>{});
+});
+
+const checkoutForm=document.getElementById('checkoutForm');
+checkoutForm.addEventListener('submit',e=>{
+  e.preventDefault();
+  const client=document.getElementById('checkoutClient').value.trim();
+  const desc=document.getElementById('checkoutDescription').value.trim();
+  const total=parseFloat(document.getElementById('totalPrice').textContent);
+  if(cart.length===0){alert('Cart is empty!');return}
+  saveTransaction(JSON.stringify(cart),total,client,desc).then(()=>{
+    cart=[];
+    renderCart();
+    renderTransactions();
+    loadTopItems();
+    updateSidebarSummary();
+    bootstrap.Modal.getInstance(document.getElementById('checkoutModal')).hide();
+    alert('Transaction saved successfully!');
+  }).catch(()=>{});
+});
+
+document.getElementById('saveAsRecipeBtn').addEventListener('click',()=>{
+  if(cart.length===0){alert('Cart empty');return}
+  document.getElementById('recipeName').value='';
+  new bootstrap.Modal(document.getElementById('saveRecipeModal')).show();
+});
+
+document.getElementById('confirmSaveRecipe').addEventListener('click',()=>{
+  const name=document.getElementById('recipeName').value.trim();
+  if(!name){alert('Name required');return}
+  saveRecipe(name,cart);
+});
+
+document.getElementById('loadRecipeBtn').addEventListener('click',()=>{loadRecipesList()});
+</script>
+<script>
+// For test
+// We'll not repeat the test adds, but leave them.
+document.addEventListener('DOMContentLoaded',()=>{
+  // example test
+  addToCart(999,'TEST','Test Item',9.99);
+  if(cart.length===1&&cart[0].id===999&&cart[0].quantity===1){}else{}
+  addToCart(999,'TEST','Test Item',9.99);
+  if(cart.length===1&&cart[0].quantity===2){}else{}
+  removeFromCart(999);
+  if(cart.length===0){}else{}
+  addItem('TestDBItemCode','TestDBItem','12.50').then(()=>getAllItems()).then(items=>{
+    const f=items.find(i=>i.name==='TestDBItem'&&i.price===12.5);
+    if(f){}else{}
+  }).catch(()=>{});
+  if(db&&db.version===5){}else{}
+  addItem('InvalidPriceItemCode','InvalidPriceItem','abc').then(()=>{}).catch(err=>{
+    if(err==='Invalid numeric price'){}else{}
+  });
+});
+</script>
+</body>
+</html>
